@@ -1,0 +1,26 @@
+{
+  "llm_profiles": {
+    "openai_default": {
+      "provider": "openai",
+      "model": "gpt-5.4",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url_env": "OPENAI_BASE_URL",
+      "roles": ["strategist", "executor", "reviewer"]
+    },
+    "anthropic_default": {
+      "provider": "anthropic",
+      "model": "claude-sonnet",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url_env": "ANTHROPIC_BASE_URL",
+      "roles": ["strategist", "executor"]
+    },
+    "qwen_budget": {
+      "provider": "qwen",
+      "model": "qwen-plus",
+      "api_key_env": "QWEN_API_KEY",
+      "base_url_env": "QWEN_BASE_URL",
+      "roles": ["source_summary", "qa"]
+    }
+  }
+}
+

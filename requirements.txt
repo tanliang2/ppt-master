@@ -9,3 +9,7 @@
 #   pip install -r skills/ppt-master/requirements.txt   # from anywhere / 任意位置
 #
 -r skills/ppt-master/requirements.txt
+
+# Agent backend / Agent 后端
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0

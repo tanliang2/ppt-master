@@ -154,6 +154,9 @@ yarn.lock
 *.db
 *.sqlite
 *.sqlite3
+backend/runtime/*
+!backend/runtime/.gitkeep
+backend/config.local.json
 
 # Cache and locks
 .cache/
