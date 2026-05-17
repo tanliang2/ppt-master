@@ -29,7 +29,8 @@ export OPENAI_API_KEY=sk-...
 
 - 每个 provider 使用自己的环境变量，例如 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`QWEN_API_KEY`。
 - `profile` 绑定具体模型、接入点和可承担角色。
-- 任务通过 `profile_id` 选择实际模型。
+- 任务可以通过 `profile_id` 指定实际模型；不指定时，后端按配置顺序选择第一个已设置 API Key 的模型。
+- 自动选择时，如果某个模型调用失败，会记录 warning 并继续尝试下一个已配置模型。
 - API 展示时只返回密钥环境变量名和是否已设置，不返回密钥值。
 
 ## 常用 API
@@ -72,7 +73,6 @@ curl -X POST http://127.0.0.1:8080/api/jobs \
   -d '{
     "mode":"agent_plan",
     "project_path":"demo_ppt169_20260514",
-    "profile_id":"openai_default",
     "prompt":"做一份面向管理层的 12 页汇报"
   }'
 ```
@@ -92,4 +92,3 @@ curl -X POST http://127.0.0.1:8080/api/jobs \
 - 已支持模型 profile、项目创建、资料导入、任务状态、导出任务、`agent_plan.md` 生成。
 - 逐页 SVG Executor 尚未自动化接管；后续应在 `PipelineRunner._agent_plan` 之后新增 `design_spec`、`spec_lock`、`executor_page` 等阶段。
 - 状态存储使用 `backend/runtime/state.json`，适合本地开发；生产部署建议替换为数据库和 Redis 队列。
-

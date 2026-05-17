@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .llm_client import LLMClient
-from .model_profiles import ModelProfileStore
+from .model_profiles import ModelProfile, ModelProfileStore
 from .paths import REPO_ROOT, SCRIPTS_DIR
 from .storage import JsonStateStore
 
@@ -110,13 +110,12 @@ class PipelineRunner:
         profile_id: str | None,
         prompt: str | None,
     ) -> dict[str, Any]:
-        if not profile_id:
-            raise ValueError("agent_plan 任务必须指定 profile_id")
-        profile = self.profiles.get(profile_id)
-        if not profile.api_key:
-            raise ValueError(f"环境变量 {profile.api_key_env} 未设置")
-
-        self.store.append_event(job_id, f"读取 sources 并调用模型: {profile.id}")
+        candidate_profiles = self._resolve_agent_plan_profiles(profile_id)
+        self.store.append_event(
+            job_id,
+            "读取 sources；按顺序尝试模型: "
+            + ", ".join(profile.id for profile in candidate_profiles),
+        )
         source_context = self._collect_source_context(project_path)
         system = (
             "你是 PPT Master 的 Strategist 后端代理。"
@@ -128,11 +127,54 @@ class PipelineRunner:
             f"用户补充要求：{prompt or '无'}\n\n"
             f"资料内容摘录：\n{source_context}"
         )
-        content = self.llm.complete(profile, system=system, user=user)
+        profile, content = self._complete_with_first_available(
+            job_id,
+            candidate_profiles,
+            system=system,
+            user=user,
+        )
+        self.store.update_job(job_id, profile_id=profile.id)
         output_path = project_path / "agent_plan.md"
         output_path.write_text(content, encoding="utf-8")
         self.store.append_event(job_id, f"已写入 {output_path}")
-        return {"agent_plan": str(output_path)}
+        return {"agent_plan": str(output_path), "profile_id": profile.id, "model": profile.model}
+
+    def _resolve_agent_plan_profiles(self, profile_id: str | None) -> list[ModelProfile]:
+        if profile_id:
+            profile = self.profiles.get(profile_id)
+            if not profile.api_key:
+                raise ValueError(f"环境变量 {profile.api_key_env} 未设置")
+            return [profile]
+
+        candidates = self.profiles.iter_available(role="strategist")
+        if not candidates:
+            candidates = self.profiles.iter_available()
+        if not candidates:
+            raise ValueError("没有找到已配置 API Key 的模型 profile")
+        return candidates
+
+    def _complete_with_first_available(
+        self,
+        job_id: str,
+        profiles: list[ModelProfile],
+        *,
+        system: str,
+        user: str,
+    ) -> tuple[ModelProfile, str]:
+        errors: list[str] = []
+        for profile in profiles:
+            try:
+                self.store.append_event(job_id, f"尝试调用模型: {profile.id} ({profile.model})")
+                content = self.llm.complete(profile, system=system, user=user)
+                if not content.strip():
+                    raise RuntimeError("模型返回内容为空")
+                self.store.append_event(job_id, f"模型可用，已选择: {profile.id}")
+                return profile, content
+            except Exception as exc:  # noqa: BLE001
+                message = f"{profile.id}: {exc}"
+                errors.append(message)
+                self.store.append_event(job_id, f"模型调用失败，继续尝试下一个: {message}", level="warning")
+        raise RuntimeError("所有候选模型均不可用: " + " | ".join(errors))
 
     def _collect_source_context(self, project_path: Path, *, limit: int = 24000) -> str:
         sources_dir = project_path / "sources"

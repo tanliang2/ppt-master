@@ -82,8 +82,6 @@ def import_sources(project_name: str, request: SourceImportRequest) -> SourceImp
 @app.post("/api/jobs", response_model=JobResponse)
 def create_job(request: JobCreateRequest) -> JobResponse:
     project_path = _resolve_project_path(request.project_path)
-    if request.mode == "agent_plan" and not request.profile_id:
-        raise HTTPException(status_code=400, detail="agent_plan 任务必须指定 profile_id")
     job = store.create_job(
         mode=request.mode,
         project_path=str(project_path),

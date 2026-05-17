@@ -89,6 +89,20 @@ class ModelProfileStore:
         except KeyError as exc:
             raise KeyError(f"模型配置不存在: {profile_id}") from exc
 
+    def iter_available(self, *, role: str | None = None) -> list[ModelProfile]:
+        """按配置顺序返回本地可用的模型 profile。
+
+        这里的可用指已设置对应 API Key。远程连通性在真正调用时验证，
+        调用失败后由任务管线继续尝试下一个 profile。
+        """
+        profiles: list[ModelProfile] = []
+        for profile in self._profiles.values():
+            if role and profile.roles and role not in profile.roles:
+                continue
+            if profile.api_key:
+                profiles.append(profile)
+        return profiles
+
     def test(self, profile_id: str, *, live: bool = False) -> ModelProfileTestResponse:
         profile = self.get(profile_id)
         if not profile.api_key:
@@ -221,4 +235,3 @@ class ModelProfileStore:
             return None
         value = os.environ.get(str(name), "").strip()
         return value or None
-
