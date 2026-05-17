@@ -15,6 +15,25 @@ uvicorn backend.app.main:app --reload --port 8080
 curl http://127.0.0.1:8080/api/health
 ```
 
+## 前端跨域
+
+后端默认允许本机开发来源访问 API：
+
+- `http://127.0.0.1:<任意端口>`
+- `http://localhost:<任意端口>`
+
+如果需要限制到固定前端地址，可以设置：
+
+```bash
+export PPT_MASTER_CORS_ORIGINS=http://127.0.0.1:53585,http://localhost:53585
+```
+
+如果需要改成自定义正则，可以设置：
+
+```bash
+export PPT_MASTER_CORS_ORIGIN_REGEX='^https?://(localhost|127\.0\.0\.1)(:\d+)?$'
+```
+
 ## 多模型配置
 
 默认读取 `backend/config.example.json`。生产环境建议复制为本地文件，并通过环境变量指定：
@@ -64,6 +83,18 @@ curl -X POST http://127.0.0.1:8080/api/projects/demo_ppt169_20260514/sources \
   -H 'Content-Type: application/json' \
   -d '{"items":["/absolute/path/source.pdf"],"mode":"copy"}'
 ```
+
+注意：当前导入资料接口接收的是后端机器能访问到的路径或 URL，不是浏览器文件上传。如果前端和后端都在同一台 Mac 上，可以传 `/Users/.../xxx.pdf`；如果后端部署在远程机器，需要新增 multipart 文件上传接口。
+
+浏览器文件上传：
+
+```bash
+curl -X POST http://127.0.0.1:8080/api/projects/demo_ppt169_20260514/sources/upload \
+  -F 'files=@/absolute/path/source.pdf' \
+  -F 'files=@/absolute/path/notes.md'
+```
+
+上传接口会先把文件保存到 `backend/runtime/uploads/` 临时目录，再调用现有 `import-sources` 流程导入到项目 `sources/`，成功或失败后都会清理临时目录。
 
 生成 Strategist 起步计划：
 

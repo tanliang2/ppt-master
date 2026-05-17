@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .model_profiles import ModelProfileStore
-from .paths import REPO_ROOT
+from .paths import REPO_ROOT, RUNTIME_DIR
 from .pipeline import PipelineRunner
 from .schemas import (
     ExportItem,
@@ -28,7 +33,25 @@ from .schemas import (
 from .storage import JsonStateStore
 
 
+DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
+
+def _split_env_list(value: str | None) -> list[str]:
+    """读取逗号分隔的环境变量列表。"""
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 app = FastAPI(title="PPT Master Agent Backend", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_split_env_list(os.environ.get("PPT_MASTER_CORS_ORIGINS")),
+    allow_origin_regex=os.environ.get("PPT_MASTER_CORS_ORIGIN_REGEX", DEFAULT_CORS_ORIGIN_REGEX),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 store = JsonStateStore()
 profiles = ModelProfileStore()
 runner = PipelineRunner(store, profiles)
@@ -76,6 +99,37 @@ def import_sources(project_name: str, request: SourceImportRequest) -> SourceImp
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return SourceImportResponse(project_path=str(project_path), summary=summary)
+
+
+@app.post("/api/projects/{project_name}/sources/upload", response_model=SourceImportResponse)
+def upload_sources(
+    project_name: str,
+    files: list[UploadFile] = File(...),
+) -> SourceImportResponse:
+    project_path = _resolve_project_path(project_name)
+    if not files:
+        raise HTTPException(status_code=400, detail="至少上传一个文件")
+
+    upload_dir = _create_upload_dir(project_path)
+    saved_paths: list[str] = []
+    try:
+        for item in files:
+            target = _safe_upload_target(upload_dir, item.filename)
+            with target.open("wb") as fh:
+                shutil.copyfileobj(item.file, fh)
+            saved_paths.append(str(target))
+
+        summary = runner.import_sources(
+            project_path=str(project_path),
+            items=saved_paths,
+            mode="move",
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        shutil.rmtree(upload_dir, ignore_errors=True)
+
     return SourceImportResponse(project_path=str(project_path), summary=summary)
 
 
@@ -148,3 +202,22 @@ def _resolve_project_path(value: str) -> Path:
     if not project_path.exists() or not project_path.is_dir():
         raise HTTPException(status_code=404, detail=f"项目不存在: {value}")
     return project_path
+
+
+def _create_upload_dir(project_path: Path) -> Path:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    upload_dir = RUNTIME_DIR / "uploads" / project_path.name / f"{timestamp}_{uuid4().hex}"
+    upload_dir.mkdir(parents=True, exist_ok=False)
+    return upload_dir
+
+
+def _safe_upload_target(upload_dir: Path, filename: str | None) -> Path:
+    raw_name = Path(filename or "source").name
+    safe_name = "".join(ch if ch.isalnum() or ch in "-_ ." else "_" for ch in raw_name).strip()
+    safe_name = safe_name.strip(".") or "source"
+    target = upload_dir / safe_name
+    counter = 2
+    while target.exists():
+        target = upload_dir / f"{Path(safe_name).stem}_{counter}{Path(safe_name).suffix}"
+        counter += 1
+    return target
