@@ -12,8 +12,9 @@ from pathlib import Path
 from typing import Any
 
 import certifi
+from dotenv import load_dotenv
 
-from .paths import DEFAULT_CONFIG_PATH
+from .paths import BACKEND_DIR, DEFAULT_CONFIG_PATH, REPO_ROOT
 from .schemas import ModelProfileSummary, ModelProfileTestResponse
 
 
@@ -79,6 +80,7 @@ class ModelProfileStore:
     """从 JSON 配置文件加载可用模型 profile。"""
 
     def __init__(self, config_path: str | None = None) -> None:
+        _load_local_env()
         env_path = os.environ.get("PPT_MASTER_LLM_CONFIG")
         self.config_path = Path(config_path or env_path or DEFAULT_CONFIG_PATH)
         self._profiles = self._load_profiles()
@@ -169,6 +171,14 @@ class ModelProfileStore:
                 base_url=os.environ.get("ANTHROPIC_BASE_URL", PROVIDER_DEFAULTS["anthropic"]["base_url"]),
                 roles=["strategist", "executor"],
             ),
+            "deepseek_default": ModelProfile(
+                id="deepseek_default",
+                provider="deepseek",
+                model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+                api_key_env="DEEPSEEK_API_KEY",
+                base_url=os.environ.get("DEEPSEEK_BASE_URL", PROVIDER_DEFAULTS["deepseek"]["base_url"]),
+                roles=["strategist", "executor", "reviewer"],
+            ),
             "qwen_default": ModelProfile(
                 id="qwen_default",
                 provider="qwen",
@@ -243,3 +253,10 @@ class ModelProfileStore:
 def _ssl_context() -> ssl.SSLContext:
     """使用 certifi 根证书，避免 macOS venv 缺 CA 导致 HTTPS 探测失败。"""
     return ssl.create_default_context(cafile=certifi.where())
+
+
+def _load_local_env() -> None:
+    """加载本地未提交的环境变量文件。"""
+    for env_path in (REPO_ROOT / ".env", BACKEND_DIR / ".env"):
+        if env_path.exists():
+            load_dotenv(env_path, override=False)

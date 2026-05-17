@@ -44,6 +44,13 @@ export PPT_MASTER_LLM_CONFIG=backend/config.local.json
 export OPENAI_API_KEY=sk-...
 ```
 
+后端启动时也会自动读取仓库根目录 `.env` 和 `backend/.env`。这些文件默认不提交，适合保存本机 API Key：
+
+```bash
+DEEPSEEK_API_KEY=sk-...
+DEEPSEEK_MODEL=deepseek-chat
+```
+
 配置原则：
 
 - 每个 provider 使用自己的环境变量，例如 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`QWEN_API_KEY`。
