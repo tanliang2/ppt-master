@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import ssl
+import urllib.error
 import urllib.request
+
+import certifi
 
 from .model_profiles import ModelProfile
 
@@ -79,6 +83,17 @@ class LLMClient:
             },
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=120) as response:
-            return json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=120, context=_ssl_context()) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace").strip()
+            detail = f"HTTP {exc.code}"
+            if body:
+                detail = f"{detail}: {body[:1000]}"
+            raise RuntimeError(detail) from exc
 
+
+def _ssl_context() -> ssl.SSLContext:
+    """使用 certifi 根证书，避免 macOS venv 缺 CA 导致 HTTPS 调用失败。"""
+    return ssl.create_default_context(cafile=certifi.where())

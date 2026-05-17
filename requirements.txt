@@ -11,6 +11,7 @@
 -r skills/ppt-master/requirements.txt
 
 # Agent backend / Agent 后端
+certifi>=2024.8.30
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.20

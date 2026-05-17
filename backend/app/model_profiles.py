@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import certifi
 
 from .paths import DEFAULT_CONFIG_PATH
 from .schemas import ModelProfileSummary, ModelProfileTestResponse
@@ -206,7 +209,7 @@ class ModelProfileStore:
             )
 
         try:
-            with urllib.request.urlopen(request, timeout=10) as response:
+            with urllib.request.urlopen(request, timeout=10, context=_ssl_context()) as response:
                 ok = 200 <= response.status < 300
                 return ModelProfileTestResponse(
                     profile_id=profile.id,
@@ -235,3 +238,8 @@ class ModelProfileStore:
             return None
         value = os.environ.get(str(name), "").strip()
         return value or None
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """使用 certifi 根证书，避免 macOS venv 缺 CA 导致 HTTPS 探测失败。"""
+    return ssl.create_default_context(cafile=certifi.where())
